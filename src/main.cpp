@@ -20,7 +20,7 @@ int main() {
 	const double dt = 0.001;
 
 	sf::Clock fpstimer;
-	const sf::Font font("/Library/Fonts/JetBrainsMonoNL-Regular.ttf");
+	const sf::Font font("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
 
 	std::mt19937 gen(42);
 	std::normal_distribution<double> cluster(1.0 * screen_size / 2, 1.0 * screen_size / 10);
