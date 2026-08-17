@@ -19,15 +19,21 @@ FetchContent_MakeAvailable(SFML)
 target_compile_features(sim PRIVATE cxx_std_20)
 target_link_libraries(sim PRIVATE sfml-graphics sfml-window sfml-system)
 
-# Cross-platform OpenMP (Linux/macOS/Windows where available)
 find_package(OpenMP REQUIRED)
 target_link_libraries(sim PRIVATE OpenMP::OpenMP_CXX)
 
-# Optional: keep Apple-specific fallback only if you truly need it
+# Keep only if needed on Apple
 if(APPLE)
     target_include_directories(sim PRIVATE /opt/homebrew/opt/libomp/include)
     target_link_directories(sim PRIVATE /opt/homebrew/opt/libomp/lib)
 endif()
 
-set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT main)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+# Better than overwriting global CMAKE_CXX_FLAGS_RELEASE
+target_compile_options(sim PRIVATE
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+)
+
+# Optional: enable IPO/LTO in Release
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT sim)
