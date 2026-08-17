@@ -2,9 +2,11 @@
 #include <vector>
 #include <random>
 #include <iostream>
-#include <fstream>
 #include <optional>
 #include <string>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
 
 #include <omp.h>
 
@@ -16,16 +18,19 @@ int main() {
     sf::Color p_color = sf::Color::Cyan;
     const int screen_size = 1380;
     sf::RenderWindow window(sf::VideoMode({screen_size, screen_size}), "Simulation");
-    const int frame_rate = 60;
-    window.setFramerateLimit(frame_rate);
+    window.setFramerateLimit(60);
 
+    // Simulation settings
     const double dt = 0.001;
+    const int BUILD_EVERY_N_FRAMES = 4; // 1 = every frame, 2 = every second frame, etc.
 
-    sf::Clock fpstimer;
+    sf::Clock frameTimer;
+    sf::Clock phaseClock;
     sf::Clock uiTimer;
 
-    // Cross-platform-ish font fallback chain
+    // Font loading with fallbacks
     sf::Font font;
+    bool canDrawText = false;
     {
         const std::vector<std::string> fontCandidates = {
             "assets/fonts/JetBrainsMonoNL-Regular.ttf",
@@ -34,20 +39,20 @@ int main() {
             "/Library/Fonts/JetBrainsMonoNL-Regular.ttf"
         };
 
-        bool loaded = false;
         for (const auto& path : fontCandidates) {
             if (font.openFromFile(path)) {
-                loaded = true;
                 std::cout << "Loaded font: " << path << "\n";
+                canDrawText = true;
                 break;
             }
         }
 
-        if (!loaded) {
-            std::cerr << "Warning: no font loaded. FPS text will be hidden.\n";
+        if (!canDrawText) {
+            std::cerr << "Warning: no font loaded. Overlay text disabled.\n";
         }
     }
 
+    // Initial particle setup
     std::mt19937 gen(42);
     std::normal_distribution<double> cluster(1.0 * screen_size / 2, 1.0 * screen_size / 10);
     std::uniform_real_distribution<double> uniform(100.0, screen_size * 1.0 - 100.0);
@@ -76,33 +81,33 @@ int main() {
         }
     }
 
+    // Build initial tree/forces
     fmm::FmmTree tree(sources, 60, 10);
     // fmm::BhTree tree(sources, 1, 2.5);
     tree.buildTree();
 
     bool drawBoxes = false;
 
-    int frame_limit = 1800, tot_frames = 0;
-    float tot_time = 0, max_time = 0, min_time = 100;
-    float times[1800]{};
-
-    double error_l2[1800]{};
-    double error_abs[1800]{};
-    double avg_error_l2 = 0, avg_error_abs = 0, max_error = 0;
-
-    // Reuse render buffers (avoid per-frame allocations)
+    // Reused draw buffers
     sf::VertexArray particle_va(sf::PrimitiveType::Points, sources.size());
     for (size_t i = 0; i < sources.size(); ++i) {
         particle_va[i].color = p_color;
     }
 
-    sf::Text number(font, "0.0ms", 24);
-    number.setFillColor(sf::Color::White);
-    bool canDrawText = font.getInfo().family != "";
+    sf::Text overlay(font, "", 20);
+    overlay.setFillColor(sf::Color::White);
+    overlay.setPosition({10.f, 8.f});
 
-    std::string msText = "0.0ms";
+    // Timing stats
+    int tot_frames = 0;
+    float tIntegrateMs = 0.f, tBuildMs = 0.f, tRenderMs = 0.f, tFrameMs = 0.f;
+    float emaBuildMs = 0.f;
+    float maxBuildMs = 0.f;
+    constexpr float emaAlpha = 0.10f;
 
     while (window.isOpen()) {
+        frameTimer.restart();
+
         while (const std::optional event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) window.close();
             else if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
@@ -110,19 +115,44 @@ int main() {
             }
         }
 
-        fpstimer.restart();
         window.clear(sf::Color::Black);
 
-        // Velocity Verlet half-step
+        // Phase 1: integrate (half-kick + drift)
+        phaseClock.restart();
         #pragma omp parallel for schedule(static)
         for (int i = 0; i < static_cast<int>(sources.size()); i++) {
             sources[i].velocity += 0.5 * tree.forces[i] * dt;
             sources[i].position += sources[i].velocity * dt;
         }
+        tIntegrateMs = static_cast<float>(phaseClock.getElapsedTime().asMicroseconds()) / 1000.0f;
 
-        // Recompute forces at new positions
-        tree.buildTree();
-        // fmm::ErrorData error = fmm::evaluateSimulationError(sources, tree.forces, 1000);
+        // Phase 2: rebuild tree (optionally decimated)
+        phaseClock.restart();
+        if (BUILD_EVERY_N_FRAMES <= 1 || (tot_frames % BUILD_EVERY_N_FRAMES) == 0) {
+            tree.buildTree();
+        }
+        tBuildMs = static_cast<float>(phaseClock.getElapsedTime().asMicroseconds()) / 1000.0f;
+
+        // Build-time stats
+        if (tot_frames == 0) emaBuildMs = tBuildMs;
+        else emaBuildMs = (1.0f - emaAlpha) * emaBuildMs + emaAlpha * tBuildMs;
+        maxBuildMs = std::max(maxBuildMs, tBuildMs);
+
+        // Phase 3: second half-kick + draw prep + draw
+        phaseClock.restart();
+
+        #pragma omp parallel for schedule(static)
+        for (int i = 0; i < static_cast<int>(sources.size()); i++) {
+            sources[i].velocity += 0.5 * tree.forces[i] * dt;
+        }
+
+        // Updating vertex buffer is often smoother single-threaded
+        for (size_t i = 0; i < sources.size(); ++i) {
+            particle_va[i].position = sf::Vector2f(
+                static_cast<float>(sources[i].position.real()),
+                static_cast<float>(sources[i].position.imag())
+            );
+        }
 
         if (drawBoxes) {
             auto boxes = tree.getBoxGeometries();
@@ -143,57 +173,41 @@ int main() {
 
                 box_va[id_b    ] = sf::Vertex{tl, box_color};
                 box_va[id_b + 1] = sf::Vertex{tr, box_color};
-
                 box_va[id_b + 2] = sf::Vertex{tr, box_color};
                 box_va[id_b + 3] = sf::Vertex{br, box_color};
-
                 box_va[id_b + 4] = sf::Vertex{br, box_color};
                 box_va[id_b + 5] = sf::Vertex{bl, box_color};
-
                 box_va[id_b + 6] = sf::Vertex{bl, box_color};
                 box_va[id_b + 7] = sf::Vertex{tl, box_color};
             }
             window.draw(box_va);
         }
 
-        // Velocity Verlet second half-step
-        #pragma omp parallel for schedule(static)
-        for (int i = 0; i < static_cast<int>(sources.size()); i++)
-            sources[i].velocity += 0.5 * tree.forces[i] * dt;
-
-        // Update particle vertices (single-thread often smoother for this memory pattern)
-        for (size_t i = 0; i < sources.size(); ++i) {
-            float cx = static_cast<float>(sources[i].position.real());
-            float cy = static_cast<float>(sources[i].position.imag());
-            particle_va[i].position = sf::Vector2f(cx, cy);
-        }
-
         window.draw(particle_va);
 
-        float ms = static_cast<float>(fpstimer.getElapsedTime().asMicroseconds()) / 1000.0f;
+        tRenderMs = static_cast<float>(phaseClock.getElapsedTime().asMicroseconds()) / 1000.0f;
+        tFrameMs = static_cast<float>(frameTimer.getElapsedTime().asMicroseconds()) / 1000.0f;
 
-        // Update displayed timing text at ~10Hz instead of every frame
-        if (uiTimer.getElapsedTime().asMilliseconds() >= 100) {
-            msText = std::to_string(ms).substr(0, 5) + "ms";
-            if (canDrawText) number.setString(msText);
+        // Update overlay at ~10 Hz
+        if (canDrawText && uiTimer.getElapsedTime().asMilliseconds() >= 100) {
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(2)
+                << "frame: " << tFrameMs << " ms\n"
+                << "integrate: " << tIntegrateMs << " ms\n"
+                << "buildTree: " << tBuildMs << " ms"
+                << " (ema " << emaBuildMs << ", max " << maxBuildMs << ")\n"
+                << "render: " << tRenderMs << " ms\n"
+                << "build every N: " << BUILD_EVERY_N_FRAMES;
+            overlay.setString(oss.str());
             uiTimer.restart();
         }
 
         if (canDrawText) {
-            window.draw(number);
+            window.draw(overlay);
         }
 
         window.display();
-
-        // min_time = std::min(min_time, ms);
-        // max_time = std::max(max_time, ms);
-        // tot_time += ms;
-        // times[tot_frames] = ms;
-
         tot_frames++;
-        if (tot_frames >= frame_limit) {
-            // break; // keep disabled unless you want fixed-length benchmark runs
-        }
     }
 
     return 0;
