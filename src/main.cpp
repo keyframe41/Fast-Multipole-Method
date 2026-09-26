@@ -12,7 +12,7 @@
 
 int main() {
 	sf::Color p_color = sf::Color::Cyan;	
-	const int screen_size = 1380;
+	const int screen_size = 1100;
 	sf::RenderWindow window(sf::VideoMode({screen_size, screen_size}) , "Simulation");
 	const int frame_rate = 60;
 	window.setFramerateLimit(frame_rate);
@@ -28,13 +28,13 @@ int main() {
 
 	std::vector<fmm::Source> sources;
 	Complex center{1.0 * screen_size / 2, 1.0 * screen_size / 2};
-	for (size_t i = 0; i < 40000; i++) { 
+	for (size_t i = 0; i < 120000; i++) { 
 		double x = cluster(gen), y = cluster(gen);
-		while (x < 100 or x > screen_size - 100) x = cluster(gen);
-		while (y < 100 or y > screen_size - 100) y = cluster(gen);
+		while (x < 400 or x > screen_size - 400) x = cluster(gen);
+		while (y < 400 or y > screen_size - 400) y = cluster(gen);
 		sources.emplace_back(x, y, 10.0);
 	}
-	for (size_t i = 0; i < 10000; i++) 
+	for (size_t i = 0; i < 00000; i++) 
 		sources.emplace_back(uniform(gen), uniform(gen), 1.0);
 
 	const double orbital_speed = 200.0;
