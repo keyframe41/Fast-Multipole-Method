@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_executable(sim src/main.cpp)
 
-# 1. Fetch SFML normally (Without OpenMP polluting it)
 include(FetchContent)
 FetchContent_Declare(SFML
     GIT_REPOSITORY https://github.com/SFML/SFML.git
@@ -18,16 +17,14 @@ FetchContent_Declare(SFML
 )
 FetchContent_MakeAvailable(SFML)
 
-# 2. Link SFML to your executable
 target_compile_features(sim PRIVATE cxx_std_20)
 target_link_libraries(sim PRIVATE sfml-graphics sfml-window sfml-system)
 
-# 3. Target-Specific OpenMP for Mac (Applies ONLY to 'sim')
 if(APPLE)
     target_include_directories(sim PRIVATE /opt/homebrew/opt/libomp/include)
     target_link_directories(sim PRIVATE /opt/homebrew/opt/libomp/lib)
     target_compile_options(sim PRIVATE -Xpreprocessor -fopenmp)
-    target_link_options(sim PRIVATE -Xpreprocessor -fopenmp) # Ensure linker knows about threads
+    target_link_options(sim PRIVATE -Xpreprocessor -fopenmp)
     target_link_libraries(sim PRIVATE omp)
 endif()
 
