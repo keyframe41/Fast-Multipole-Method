@@ -1,6 +1,9 @@
+# 2D Fast Multipole Method
 ![CI](https://github.com/keyframe41/Fast-Multipole-Method/actions/workflows/ci.yml/badge.svg)
 
-This is an implementation of the 2D Fast Multipole Method (FMM) in C++ and SFML. FMM (invented by Greengard and Rokhlin) is an algorithm that solves the N-body problem in O(N) to a desired precision, a significant improvement over more commonly seen methods like Barnes-Hut, which is O(NlogN) with unbounded error. I created a 2-part video series to explain this algorithm, which you can watch here:
+![simulation with 120,000 particles](assets/demo.gif)
+
+This is an implementation of the 2D Fast Multipole Method (FMM) in C++ and rendered in real time with SFML, using Velocity Verlet integration. FMM, invented by Greengard and Rokhlin, is an algorithm that solves the N-body problem in `O(N)` to a desired precision, a significant improvement over more commonly seen methods like Barnes-Hut, which is `O(NlogN)` with unbounded error, or naive calculation which is `O(N²)`. I created a 2-part video series to explain this algorithm, which you can watch here:
 
 - [The mathematics](https://youtu.be/FhMftauQZqU)
 
@@ -10,120 +13,127 @@ This motivates each part of the algorithm from scratch, so only complex numbers 
 
 This goes through the structure of my code as well as optimizations I made. In the end I present performance tests on speed and accuracy when varying different parameters (e.g. box capacity, expansion order, particle distribution) as well as comparisons against the naive method and Barnes-Hut, from which the advantages of FMM become extremely apparent.
 
-# CMake SFML Project Template
+## How FMM works
 
-This repository template should allow for a fast and hassle-free kick start of your next SFML project using CMake.
-Thanks to [GitHub's nature of templates](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template), you can fork this repository without inheriting its Git history.
+Each time step:
 
-The template starts out very basic, but might receive additional features over time:
+1. **Tree build** using an adaptive quadtree to subdivide until each leaf node holds at most a constant number of bodies, `s`.
+2.  **Upward pass** to form multipole expansions of order `p`. Each leaf calculates it directly from the particles, and then we move up the tree by using the multipole shift operator (M2M).
+3. **Generate the interaction lists** for every node:
+   - **U**: adjacent leaves, whose forces are summed directly (too close for our clever tricks)
+   - **V**: well-separated boxes at the same level, whose multipole expansions can be flipped to local expansions (M2L)
+   - **W and X**: neighbors of different sizes, which only appear in the adaptive tree and which we have to deal with in different ways
+4. **Downward pass** to pass local expansions down to the leaf nodes, again shifting their centers (L2L).
+5. **Evaluate forces** at each leaf with the local expansion at its bodies, added to some other operations we perform on certain interaction lists (U and W).
 
-- Basic CMake script to build your project and link SFML on any operating system
-- Basic [GitHub Actions](https://github.com/features/actions) script for all major platforms
+## Results
 
-## Quick start
+(Measured on MacBook Pro M4, 10 cores) (More detail about tests is provided in the second video)
 
-### Command line
+FMM has several parameters which can be changed. First is `s`, which determines the maximum number of particles allowed in a leaf node. I tested varying values of `s` using two different particle distributions, arriving at the optimal value of `s = 60` which I used thereafter.
 
-1. Install [Git](https://git-scm.com/downloads) and [CMake](https://cmake.org/download/). Use your system's package manager if available.
-2. Follow [GitHub's instructions](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template) for how to use their project template feature to create your own project. If you don't want to use GitHub, see the section below.
-3. Clone your new GitHub repo and open the repo in your text editor of choice.
-4. Open [CMakeLists.txt](CMakeLists.txt). Rename the project and the target name of the executable to whatever name you want. Make sure to change all occurrences.
-5. If you want to add or remove any .cpp files, change the source files listed in the `add_executable` call in CMakeLists.txt to match the source files your project requires. If you plan on keeping the default main.cpp file then no changes are required.
-6. If your code uses the Audio or Network modules then add `SFML::Audio` or `SFML::Network` to the `target_link_libraries` call alongside the existing `SFML::Graphics` library that is being linked.
-7. If you use Linux, install SFML's dependencies using your system package manager. On Ubuntu and other Debian-based distributions you can use the following commands:
-   ```
-   sudo apt update
-   sudo apt install \
-       libxrandr-dev \
-       libxcursor-dev \
-       libxi-dev \
-       libudev-dev \
-       libfreetype-dev \
-       libflac-dev \
-       libvorbis-dev \
-       libgl1-mesa-dev \
-       libegl1-mesa-dev \
-       libfreetype-dev \
-       libharfbuzz-dev \
-       libmbedtls-dev \
-       libssh2-1-dev
-   ```
-8. Configure and build your project. Most popular IDEs support CMake projects with very little effort on your part.
+I was able to reach over 10¹² effective force calculations per second (140,000 particles, 60fps) with expansion order `p = 10`, yielding an error of about 10⁻⁶. When `p = 20`, this error decreases to around 10⁻¹⁰.
 
-   - [VS Code](https://code.visualstudio.com) via the [CMake extension](https://code.visualstudio.com/docs/cpp/cmake-linux)
-   - [Visual Studio](https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=msvc-170)
-   - [CLion](https://www.jetbrains.com/clion/features/cmake-support.html)
-   - [Qt Creator](https://doc.qt.io/qtcreator/creator-project-cmake.html)
+"Effective interactions" means N² divided by the time per step: the number of pairwise forces that direct summation would compute in the same time. Error is measured by `diagnostics.hpp` against exact naive calculation over a random sample of targets.
 
-   Using CMake from the command line is straightforward as well.
-   Be sure to run these commands in the root directory of the project you just created.
+| N | Naive (ms/step) | Barnes–Hut (ms/step), `θ = 1` | FMM (ms/step), `p = 10` |
+| --- | --- | --- | --- |
+| 0 | 0.3335 | 0.3084 | 0.2733 |
+| 1,000 |  1.2181| 2.6156 | 1.9673|
+| 2,000 | 3.0139| 3.3530 | 2.5848 |
+| 5,000 | -|4.6285 | 3.7668 |
+| 10,000 | 13.2702 | 4.8142 | 4.3180 |
+| 20,000 | -| 6.5678 | 4.6049  |
+| 50,000 | -| 13.0064 | 7.3974 |
+| 80,000 | -| 20.7186 | 9.8431 |
+| 100,000 | -| -| 12.0837 |
+| 140,000 | -| -| 16.4699 |
+| 150,000 | -| -| 17.5005 |
+| 200,000 | -| -| 23.3487 |
 
-   ```
-   cmake -B build
-   cmake --build build
-   ```
+![performance graph](assets/performance.png)
 
-9. Enjoy!
+### Error
+Moreover, the arguably more significant advantage of FMM is its tunable error. Barnes-Hut's error is unpredictable and significantly high, even at low values of `θ` (which also lead to very slow performance), while FMM has a guaranteed exponentially decreasing error bound.
 
-### Visual Studio
+![Barnes-Hut error graph](assets/bherror.png)
+Barnes-Hut
 
-Using a Visual Studio workspace is the simplest way to get started on windows.
+![FMM error graph](assets/fmmerror.png)
+FMM
 
-1. Ensure you have the [required components installed](https://learn.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio#installation).
-2. Follow [GitHub's instructions](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template) for how to use their project template feature to create your own project.
-3. If you have already cloned this repo, you can [open the folder](https://learn.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio0#ide-integration).
-4. If not, you can [clone it directly in Visual Studio](https://learn.microsoft.com/en-us/visualstudio/get-started/tutorial-open-project-from-repo).
+## Design notes
 
-Visual Studio should automatically configure the CMake project, then you can build and run as normal through Visual Studio. See the links above for more details.
+- **Node arena with 32-bit indices.** All tree nodes live in one preallocated array and refer to each other by `uint32_t` index instead of by pointer. There's no heap allocation per node, children are stored close together in memory, and each reference is half the size of a pointer.
+- **In-place partitioning.** Tree construction sorts the bodies into quadrants in place, in the style of quicksort. Every node then owns a contiguous range of the body array, so no per-node child arrays are needed and leaf loops read memory sequentially.
+- **Per-thread deferred updates.** Interaction lists are built in parallel with OpenMP. Writing straight into another node's lists from several threads would be a data race, so each thread records its updates in its own buffer, and the buffers are merged afterwards.
+- **Fixed-size expansions.** Expansion coefficients are stored in fixed-size arrays (expansion order up to 30) to avoid heap allocation inside the hot loops.
+- **Depth cap.** Subdivision stops at depth 20, where floating-point precision can no longer separate nearby bodies.
 
-## Upgrading SFML
+## Files
 
-SFML is found via CMake's [FetchContent](https://cmake.org/cmake/help/latest/module/FetchContent.html) module.
-FetchContent automatically downloads SFML from GitHub and builds it alongside your own code.
-Beyond the convenience of not having to install SFML yourself, this ensures ABI compatibility and simplifies things like specifying static versus shared libraries.
+| File | Contents |
+| --- | --- |
+| `src/main.cpp` | Initial conditions, time integration, rendering |
+| `src/adaptive_quadtree.hpp` | Base quadtree, node adjacency, breadth-first traversal |
+| `src/fmm_tree.hpp` | FMM tree construction, U/V/W/X lists, upward and downward passes |
+| `src/multipole_expansion.hpp` | Multipole expansions, their translation (M2M), and evaluation |
+| `src/local_expansion.hpp` | Local expansions, conversion from multipoles (M2L), translation (L2L), and evaluation |
+| `src/math_utils.hpp` | Shared series base class, binomial table, file input/output |
+| `src/barnes_hut_tree.hpp` | Barnes–Hut implementation used as a comparison baseline |
+| `src/diagnostics.hpp` | Exact force summation and error measurement |
 
-Modifying what version of SFML you want is as easy as changing the `GIT_TAG` argument.
-Currently it uses SFML 3 via the `3.1.0` tag.
+## Building and running
 
-## But I want to...
+### Requirements
 
-Modify CMake options by adding them as configuration parameters (with a `-D` flag) or by modifying the contents of CMakeCache.txt and rebuilding.
+- CMake 3.28 or newer
+- A C++20 compiler with OpenMP
+- CMake downloads and builds SFML automatically
 
-### Not use GitHub
+Platform setup:
 
-You can use this project without a GitHub account by [downloading the contents](https://github.com/SFML/cmake-sfml-project/archive/refs/heads/master.zip) of the repository as a ZIP archive and unpacking it locally.
-This approach also avoids using Git entirely if you would prefer to not do that.
+- **macOS:** install OpenMP with `brew install libomp`.
+- **Linux:** install SFML's system dependencies:
 
-### Change Compilers
+  ```bash
+  sudo apt-get install libxrandr-dev libxcursor-dev libxi-dev libudev-dev \
+    libfreetype-dev libharfbuzz-dev libflac-dev libvorbis-dev \
+    libgl1-mesa-dev libegl1-mesa-dev
+  ```
 
-See the variety of [`CMAKE_<LANG>_COMPILER`](https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER.html) options.
-In particular you'll want to modify `CMAKE_CXX_COMPILER` to point to the C++ compiler you wish to use.
+- **Windows:** Visual Studio 2022 with the C++ workload; no extra installation is needed.
 
-### Change Compiler Optimizations
+### Build
 
-CMake abstracts away specific optimizer flags through the [`CMAKE_BUILD_TYPE`](https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html) option.
-By default this project recommends `Release` builds which enable optimizations.
-Other build types include `Debug` builds which enable debug symbols but disable optimizations.
-If you're using a multi-configuration generator (as is often the case on Windows), you can modify the [`CMAKE_CONFIGURATION_TYPES`](https://cmake.org/cmake/help/latest/variable/CMAKE_CONFIGURATION_TYPES.html#variable:CMAKE_CONFIGURATION_TYPES) option.
+```bash
+git clone https://github.com/keyframe41/Fast-Multipole-Method.git
+cd Fast-Multipole-Method
+cmake -S . -B build
+cmake --build build --config Release
+```
 
-### Change Generators
+### Build and Run
 
-While CMake will attempt to pick a suitable default generator, some systems offer a number of generators to choose from.
-Ubuntu, for example, offers Makefiles and Ninja as two potential options.
-For a list of generators, click [here](https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html).
-To modify the generator you're using you must reconfigure your project providing a `-G` flag with a value corresponding to the generator you want.
-You can't simply modify an entry in the CMakeCache.txt file unlike the above options.
-Then you may rebuild your project with this new generator.
+Run the program from inside the `build` folder:
 
-## More Reading
+```bash
+cd build
+make
+../bin/sim
+```
 
-Here are some useful resources if you want to learn more about CMake:
+Press **Esc** to quit.
 
-- [Official CMake Tutorial](https://cmake.org/cmake/help/latest/guide/tutorial/)
-- [How to Use CMake Without the Agonizing Pain - Part 1](https://alexreinking.com/blog/how-to-use-cmake-without-the-agonizing-pain-part-1.html)
-- [How to Use CMake Without the Agonizing Pain - Part 2](https://alexreinking.com/blog/how-to-use-cmake-without-the-agonizing-pain-part-2.html)
-- [Better CMake YouTube series by Jefferon Amstutz](https://www.youtube.com/playlist?list=PL8i3OhJb4FNV10aIZ8oF0AA46HgA2ed8g)
+To change the simulation, play around with the parameters stored in `main.cpp`.
+
+## References
+
+- L. Greengard and V. Rokhlin, "A fast algorithm for particle simulations," *Journal of Computational Physics* 73 (1987).
+- J. Carrier, L. Greengard, and V. Rokhlin, "A fast adaptive multipole algorithm for particle simulations," *SIAM Journal on Scientific and Statistical Computing* 9 (1988).
 
 ## License
 
-The source code is dual licensed under Public Domain and MIT -- choose whichever you prefer.
+Code: see [LICENSE.md](LICENSE.md). Font: JetBrains Mono, under the SIL Open Font License ([assets/OFL.txt](assets/OFL.txt)).
+
+Build setup based on SFML's [CMake project template](https://github.com/SFML/cmake-sfml-project).
