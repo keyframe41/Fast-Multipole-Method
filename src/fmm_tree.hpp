@@ -43,8 +43,6 @@ public:
 
     size_t max_sources_per_leaf;
     int expansion_order;
-    Complex center{500.0, 500.0};
-    double boundary_radius = 450.0;
 
     std::vector<Complex> forces;
 
@@ -82,8 +80,6 @@ public:
         }
 
         sortTree(root_id); // in place sort
-
-        // forces.assign(sources.size(), Complex{0.0, 0.0}); 
 
         for (const auto& level : level_indices) {
             int max_threads = omp_get_max_threads();

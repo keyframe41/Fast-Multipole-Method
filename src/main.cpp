@@ -76,7 +76,6 @@ int main() {
 			sources[i].position += sources[i].velocity * dt;
 		}
 
-		// forces = fmm::computeExactForces(sources);
 		tree.buildTree();
 		// fmm::ErrorData error = fmm::evaluateSimulationError(sources, tree.forces, 1000);
 		
