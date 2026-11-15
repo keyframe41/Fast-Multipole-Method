@@ -7,6 +7,9 @@ endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
+set(SFML_BUILD_AUDIO OFF CACHE BOOL "" FORCE)
+set(SFML_BUILD_NETWORK OFF CACHE BOOL "" FORCE)
+
 include(FetchContent)
 FetchContent_Declare(SFML
     GIT_REPOSITORY https://github.com/SFML/SFML.git
@@ -17,10 +20,10 @@ FetchContent_Declare(SFML
 )
 FetchContent_MakeAvailable(SFML)
 
+
 add_executable(sim src/main.cpp)
 target_compile_features(sim PRIVATE cxx_std_20)
 target_link_libraries(sim PRIVATE SFML::Graphics)
-
 
 if(MSVC)
     target_compile_options(sim PRIVATE /openmp:llvm)
