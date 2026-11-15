@@ -1,9 +1,13 @@
+![CI](https://github.com/keyframe41/Fast-Multipole-Method/actions/workflows/ci.yml/badge.svg)
+
 This is an implementation of the 2D Fast Multipole Method (FMM) in C++ and SFML. FMM (invented by Greengard and Rokhlin) is an algorithm that solves the N-body problem in O(N) to a desired precision, a significant improvement over more commonly seen methods like Barnes-Hut, which is O(NlogN) with unbounded error. I created a 2-part video series to explain this algorithm, which you can watch here:
 
-[The mathematics](https://youtu.be/FhMftauQZqU)
+- [The mathematics](https://youtu.be/FhMftauQZqU)
+
 This motivates each part of the algorithm from scratch, so only complex numbers + Taylor series are needed as prerequisites.
 
-[Implementation and testing](https://youtu.be/uOahsDhVZaE)
+- [Implementation and testing](https://youtu.be/uOahsDhVZaE)
+
 This goes through the structure of my code as well as optimizations I made. In the end I present performance tests on speed and accuracy when varying different parameters (e.g. box capacity, expansion order, particle distribution) as well as comparisons against the naive method and Barnes-Hut, from which the advantages of FMM become extremely apparent.
 
 # CMake SFML Project Template

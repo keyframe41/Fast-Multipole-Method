@@ -7,6 +7,7 @@
 #include <cmath>
 #include <array>
 #include <vector>
+#include <atomic>
 #include <algorithm>
 
 namespace fmm {
@@ -76,15 +77,10 @@ public:
     }
 
 private:
-    std::size_t active_nodes = 0;
+    std::atomic<std::size_t> active_nodes{0};
 
     uint32_t allocateNode(Complex center, double box_len, size_t level, uint32_t parent, bool is_leaf) {
-        uint32_t id;
-        #pragma omp atomic capture
-        {
-            id = active_nodes;
-            active_nodes++;
-        }
+        uint32_t id = static_cast<uint32_t>(active_nodes.fetch_add(1, std::memory_order_relaxed));
         
         assert(id < arena.size() && "Arena size exceeded! Adjust initial size of arena in buildTree().");
 

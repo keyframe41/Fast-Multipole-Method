@@ -20,7 +20,7 @@ int main() {
 	const double dt = 0.001;
 
 	sf::Clock fpstimer;
-	const sf::Font font("/Library/Fonts/JetBrainsMonoNL-Regular.ttf");
+	const sf::Font font("../assets/JetBrainsMonoNL-Regular.ttf");
 	
 	std::mt19937 gen(42);
 	std::normal_distribution<double> cluster(1.0 * screen_size / 2, 1.0 * screen_size / 10);
@@ -58,10 +58,6 @@ int main() {
 	int tot_frames = 0;
 	float tot_time = 0, max_time = 0, min_time = 100;
 	float times[frame_limit];
-
-	double error_l2[frame_limit];
-	double error_abs[frame_limit];
-	double avg_error_l2 = 0, avg_error_abs = 0, max_error = 0;
 
 	while (window.isOpen()) {
 		while (const std::optional event = window.pollEvent()) {
