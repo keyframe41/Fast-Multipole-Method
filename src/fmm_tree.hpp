@@ -125,10 +125,7 @@ private:
     uint32_t allocateNode (Complex center, double box_len, size_t level, uint32_t parent, bool is_leaf) {
         uint32_t id;
         #pragma omp atomic capture
-        {
-            id = active_nodes;
-            active_nodes++;
-        }
+        id = active_nodes++;
         
         arena[id].center = center;
         arena[id].box_length = box_len;

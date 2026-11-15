@@ -21,7 +21,7 @@ int main() {
 
 	sf::Clock fpstimer;
 	const sf::Font font("/Library/Fonts/JetBrainsMonoNL-Regular.ttf");
-
+	
 	std::mt19937 gen(42);
 	std::normal_distribution<double> cluster(1.0 * screen_size / 2, 1.0 * screen_size / 10);
 	std::uniform_real_distribution<double> uniform(100.0, screen_size * 1.0 - 100.0);
@@ -54,7 +54,8 @@ int main() {
 
 	bool drawBoxes = false;
 
-	int frame_limit = 1800, tot_frames = 0;
+	constexpr int frame_limit = 1800;
+	int tot_frames = 0;
 	float tot_time = 0, max_time = 0, min_time = 100;
 	float times[frame_limit];
 
