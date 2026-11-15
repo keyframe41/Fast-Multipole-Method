@@ -98,7 +98,7 @@ private:
         return id;
     }
 
-    void sortTree(uint32_t initial_root) {
+    void sortTree(uint32_t initial_root) { // Pasted from fmm_tree.hpp so performance comparison is purely on force calculation step
         unsigned depth = 0;
         bool subdivide = true;
         std::vector<uint32_t> prev_internal_nodes = {initial_root};
@@ -124,13 +124,9 @@ private:
                 auto begin = sources.begin() + start_id;
                 auto end = begin + count;
 
-                auto mid_x = std::partition(begin, end,
-                    [cx](const Source &s) { return s.position.real() < cx; });
-
-                auto mid_y1 = std::partition(begin, mid_x,
-                    [cy](const Source &s) { return s.position.imag() < cy; });
-                auto mid_y2 = std::partition(mid_x, end,
-                    [cy](const Source &s) { return s.position.imag() < cy; });
+                auto mid_x  = std::partition(begin, end,   [cx](const Source &s) { return s.position.real() < cx; });
+                auto mid_y1 = std::partition(begin, mid_x, [cy](const Source &s) { return s.position.imag() < cy; });
+                auto mid_y2 = std::partition(mid_x, end,   [cy](const Source &s) { return s.position.imag() < cy; });
 
                 std::array<uint32_t, 4> q_counts = {
                     static_cast<uint32_t>(std::distance(begin, mid_y1)),

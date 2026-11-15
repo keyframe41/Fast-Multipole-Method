@@ -67,6 +67,7 @@ constexpr uint32_t NULL_NODE = 0xFFFFFFFF;
         double dx = std::abs(this->center.real() - other.center.real());
         double dy = std::abs(this->center.imag() - other.center.imag());
         
+        // Squares touch when x and y of centers differ by lim, tol prevents floating-point error interference
         double tol = std::min(this->box_length, other.box_length) / 2.0;
         double lim = (this->box_length + other.box_length) / 2.0 + tol;
 
@@ -109,7 +110,7 @@ constexpr uint32_t NULL_NODE = 0xFFFFFFFF;
             min_y = std::min(min_y, p.position.imag());
             max_y = std::max(max_y, p.position.imag());
         }
-
+        
         double pad_x = std::min((max_x - min_x) * 1e-5, 1e-5);
         double pad_y = std::min((max_y - min_y) * 1e-5, 1e-5);
 

@@ -1,3 +1,5 @@
+// Theorem numbers taken from Greengard and Rokhlin (1987)
+// A Fast Algorithm for Particle Simulations
 #ifndef MULTIPOLE_EXPANSION_HPP
 #define MULTIPOLE_EXPANSION_HPP
 
@@ -15,7 +17,7 @@ public:
     template<typename Iterator>
     MultipoleExpansion(const Complex &center, int order, Iterator begin, Iterator end) 
         : SeriesExpansion(center, order) 
-    {
+    { // Theorem 2.1, calculating coefficients (2.3)
         for (auto it = begin; it != end; it++) {
             const auto &s = *it;
             Complex q_i = s.q;
@@ -44,7 +46,7 @@ public:
         }
     }
 
-    std::array<Complex, MAXP> shift (const Complex &disp) const {
+    std::array<Complex, MAXP> shift (const Complex &disp) const { // Lemma 2.3 calculating new coefficients (2.10)
         std::array<Complex, MAXP> shifted;
         shifted.fill(Complex{0.0, 0.0});
 
@@ -66,7 +68,7 @@ public:
         return shifted;
     }
 
-    double evaluatePotential (const Complex &point) const override {
+    double evaluatePotential (const Complex &point) const override { // Theorem 2.1 (2.2)
         Complex z_to_z_c = point - this->center;
         Complex z_to_z_c_inv = fast_inverse(z_to_z_c);
 
@@ -82,7 +84,7 @@ public:
         return result.real();
     }
 
-    Complex evaluateForce (const Complex &point) const override {
+    Complex evaluateForce (const Complex &point) const override { // derivative of (2.2)
         Complex z_to_z_c = point - this->center;
         Complex z_to_z_c_inv = fast_inverse(z_to_z_c);
 

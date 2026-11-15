@@ -1,3 +1,11 @@
+/*
+High-level sketch of the adaptive FMM algorithm:
+- Construct the quadtree such that each leaf node has at most a constant number of particles
+- Calculate multipole expansion for each leaf node, upwards pass to use this to calculate for all tree nodes
+- Find node lists for each tree node to classify other nodes
+- Downwards pass, construct local expansions using node lists to determine expansion interactions
+- Calculate final forces by also accounting for lists U and W
+*/
 #ifndef FMM_TREE_H
 #define FMM_TREE_H
 
@@ -10,7 +18,7 @@
 
 namespace fmm {
 
-struct DeferredUpdates {
+struct DeferredUpdates { // Used to prevent data races when calculating node lists
     // target, source
     std::vector<std::pair<uint32_t, uint32_t>> deferred_near;
     std::vector<std::pair<uint32_t, uint32_t>> deferred_W;   
@@ -22,10 +30,14 @@ struct DeferredUpdates {
 };
 
     struct FmmNode : public BaseNode {
-        std::vector<uint32_t> near_neighbors; // list U
-        std::vector<uint32_t> interaction_list; // list V
-        std::vector<uint32_t> list_W;
-        std::vector<uint32_t> list_X;
+        // list U - all adjacent nodes
+        std::vector<uint32_t> near_neighbors; // direct computation
+        // list V - non-adjacent children of neighbors of parent
+        std::vector<uint32_t> interaction_list; // flip multiple expansion to local expansion (M2L)
+        // list W - non-adjacent children of same-level neighbors
+        std::vector<uint32_t> list_W; // don't flip, add forces from multipole expansion
+        // list X - converse of W, if box A is in list W of box B, then box B is in list X of box A
+        std::vector<uint32_t> list_X; // construct local expansion from particles directly
 
         MultipoleExpansion multipole_expansion;
         LocalExpansion local_expansion;
@@ -48,14 +60,14 @@ public:
 
     FmmTree(std::vector<Source> &src, size_t max_s_p_l, int p) 
         : sources(src), max_sources_per_leaf(max_s_p_l), expansion_order(p) 
-    {
-        SeriesExpansion::binom_table.init(expansion_order * 2);
+    { // order = 2p as M2L needs order j + k - 1 (see flip in local_expansion.hpp)
+        SeriesExpansion::binom_table.init(expansion_order * 2); 
     }
 
     void buildTree () {
         if (sources.empty()) return;
 
-        arena.resize(sources.size() * 2);
+        arena.resize(sources.size() * 2); // Safe upper bound, remove heap allocation
         active_nodes = 0;
 
         level_indices.clear();
@@ -80,8 +92,10 @@ public:
         }
 
         sortTree(root_id); // in place sort
+        
+        upwardPass();
 
-        for (const auto& level : level_indices) {
+        for (const auto& level : level_indices) { // Find node lists
             int max_threads = omp_get_max_threads();
             std::vector<DeferredUpdates> thread_notepads(max_threads);
 
@@ -103,7 +117,6 @@ public:
             }
         }
 
-        upwardPass();
         downwardPass();
         computeForces();
     }
@@ -149,7 +162,7 @@ private:
         while (subdivide) {
             depth++;
 
-            size_t max_children = prev_internal_nodes.size() * 4;
+            size_t max_children = prev_internal_nodes.size() * 4; // Again to minimize heap allocation
             std::vector<uint32_t> next_level(max_children, NULL_NODE);
             std::vector<uint32_t> next_internal_nodes(max_children, NULL_NODE);
 
@@ -159,10 +172,14 @@ private:
                 double cx = arena[parent_id].center.real();
                 double cy = arena[parent_id].center.imag();
                 double child_len = arena[parent_id].box_length / 2.0;
-
+                
                 uint32_t start_id = arena[parent_id].start_id;
                 uint32_t count = arena[parent_id].num_sources;
-
+                // In-place partitioning, sorting particles from start_id to start_id + count - 1 into 4 quadrants
+                // First we partition by x (real), then partition left and right halves since
+                // std::partition returns the pointer to the separation point
+                // We now instantly have the range of the 4 children if we need to split them even further
+                // Furthermore such an arrangement of particles memory is efficient when looping (cache locality)
                 auto begin = sources.begin() + start_id;
                 auto end = begin + count;
                 auto mid_x  = std::partition(begin, end,   [cx](const Source &s) { return s.position.real() < cx; });
@@ -182,6 +199,7 @@ private:
                     uint32_t c_count = q_counts[c];
                     if (c_count > 0)  {
                         Complex child_center = arena[parent_id].center + child_directions[c] * (child_len / 2.0);
+                        // If depth >= 20 boxes are tiny, due to machine precision points can't really be separated so we just don't
                         bool is_leaf = (c_count <= max_sources_per_leaf) || (depth >= 20);
 
                         uint32_t child_id = allocateNode(child_center, child_len, depth, parent_id, is_leaf);
@@ -190,21 +208,21 @@ private:
                         arena[child_id].num_sources = c_count;
                         arena[parent_id].children[c] = child_id;
 
-                        next_level[i * 4 + c] = child_id;
+                        next_level[i * 4 + c] = child_id; // All nodes of next level
 
-                        if (!is_leaf) next_internal_nodes[i * 4 + c] = child_id;
+                        if (!is_leaf) next_internal_nodes[i * 4 + c] = child_id; // All nodes of next level that need subdividing
                     }
                     child_start_id += c_count;
                 }
 
             }
-
+            // Remove empty space
             next_level.erase(std::remove(next_level.begin(), next_level.end(), NULL_NODE), next_level.end());
             next_internal_nodes.erase(std::remove(next_internal_nodes.begin(), next_internal_nodes.end(), NULL_NODE), next_internal_nodes.end());
             
             if (!next_level.empty()) level_indices.push_back(next_level);
             subdivide = !next_internal_nodes.empty();
-            prev_internal_nodes = std::move(next_internal_nodes);
+            prev_internal_nodes = std::move(next_internal_nodes); // Send nodes for subdividing
         }
         this->height = depth;
     }

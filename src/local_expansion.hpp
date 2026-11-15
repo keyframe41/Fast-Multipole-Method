@@ -1,3 +1,5 @@
+// Theorem numbers taken from Greengard and Rokhlin (1987)
+// A Fast Algorithm for Particle Simulations
 #ifndef LOCAL_EXPANSION_HPP
 #define LOCAL_EXPANSION_HPP
 
@@ -18,7 +20,7 @@ namespace fmm {
         template<typename Iterator>
         LocalExpansion(const Complex &center, int order, Iterator begin, Iterator end) 
             : SeriesExpansion(center, order) 
-        {
+        { // No formula is given really, see my first video (15:57), used for list X
             for (auto it = begin; it != end; ++it) {
                 const auto& s = *it;
                 double q_i = s.q;
@@ -52,7 +54,7 @@ namespace fmm {
             this->coefficients = le.shift(disp);
         }
 
-        std::array<Complex, MAXP> multipoleToLocal (const MultipoleExpansion &me) const {
+        std::array<Complex, MAXP> multipoleToLocal (const MultipoleExpansion &me) const { // Lemma 2.4, (2.13), (2.14)
             Complex disp = me.center - this->center;
             std::array<Complex, MAXP> coefficients;
             coefficients.fill(Complex{0.0, 0.0});
@@ -83,7 +85,7 @@ namespace fmm {
             return coefficients;
         }
 
-        std::array<Complex, MAXP> shift (const Complex &disp) const { // Horner's rule magic
+        std::array<Complex, MAXP> shift (const Complex &disp) const { // Horner's rule magic, Lemma 2.15 (2.17)
             std::array<Complex, MAXP> shifted = this->coefficients;
 
             for (size_t j = 0; j < this->order; j++) {
@@ -94,7 +96,7 @@ namespace fmm {
             return shifted;
         }
 
-        double evaluatePotential (const Complex &point) const override {
+        double evaluatePotential (const Complex &point) const override { // (2.12)
             Complex disp = point - this->center;
             Complex result = (*this)(this->order);
 
@@ -105,7 +107,7 @@ namespace fmm {
             return result.real();
         }
 
-        Complex evaluateForce (const Complex &point) const override {
+        Complex evaluateForce (const Complex &point) const override { // derivative of (2.12)
             Complex disp = point - this->center;
 
             Complex result = static_cast<double>(this->order) * (*this)(this->order);

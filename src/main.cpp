@@ -21,11 +21,11 @@ int main() {
 
 	sf::Clock fpstimer;
 	const sf::Font font("../assets/JetBrainsMonoNL-Regular.ttf");
-	
+	// Generate sources, uniformly distributed in a square + normally distributed around center
 	std::mt19937 gen(42);
 	std::normal_distribution<double> cluster(1.0 * screen_size / 2, 1.0 * screen_size / 10);
 	std::uniform_real_distribution<double> uniform(100.0, screen_size * 1.0 - 100.0);
-
+	
 	std::vector<fmm::Source> sources;
 	Complex center{1.0 * screen_size / 2, 1.0 * screen_size / 2};
 	for (size_t i = 0; i < 90000; i++) { 
@@ -48,13 +48,12 @@ int main() {
 		}
 	}
 	
-	fmm::FmmTree tree(sources, 60, 10);
+	fmm::FmmTree tree(sources, 60, 10); // On my machine, optimal 60 particle/box
 	// fmm::BhTree tree(sources, 1, 2.5);
 	tree.buildTree();
 
-	bool drawBoxes = false;
-
-	constexpr int frame_limit = 1800;
+	bool drawBoxes = false; // Draw bounding boxes of all quadtree nodes
+	constexpr int frame_limit = 1800; // Used for performance collection (1800 = 30 seconds), uncomment below to use
 	int tot_frames = 0;
 	float tot_time = 0, max_time = 0, min_time = 100;
 	float times[frame_limit];
@@ -77,7 +76,7 @@ int main() {
 		}
 
 		tree.buildTree();
-		// fmm::ErrorData error = fmm::evaluateSimulationError(sources, tree.forces, 1000);
+		// fmm::ErrorData error = fmm::evaluateError(sources, tree.forces, 1000);
 		
 		if (drawBoxes) {
 			auto boxes = tree.getBoxGeometries();

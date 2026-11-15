@@ -13,9 +13,9 @@
 
 namespace fmm {
 
-constexpr int MAXP = 30 + 1;
+constexpr int MAXP = 30 + 1; // Avoid heap allocation, set max expansion order to 30
 
-class BinomialTable {
+class BinomialTable { // Precalculate binomial coefficients for expansion operators
 public:
     int max_order = 0;
     std::vector<double> table;
@@ -102,7 +102,7 @@ void toFile (const std::vector<Source> &sources, const std::string &filename) {
     ofile.close();
 }
 
-inline Complex fast_inverse (Complex& z) {
+inline Complex fast_inverse (Complex& z) { // 1/z = z/(|z|^2)
     double norm_sq = z.real() * z.real() + z.imag() * z.imag();
     return Complex(z.real() / norm_sq, -z.imag() / norm_sq);
 }

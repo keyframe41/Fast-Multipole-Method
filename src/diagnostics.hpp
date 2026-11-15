@@ -43,7 +43,7 @@ struct ErrorData {
     double mean_absolute_error;
 };
 
-ErrorData evaluateSimulationError(const std::vector<Source>& sources, const std::vector<Complex>& approx_forces, size_t sample_size = 1000) {
+ErrorData evaluateError(const std::vector<Source>& sources, const std::vector<Complex>& approx_forces, size_t sample_size = 1000) {
     size_t N = sources.size();
     size_t M = std::min(sample_size, N);
 
