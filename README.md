@@ -32,9 +32,7 @@ Each time step:
 
 FMM has several parameters which can be changed. First is `s`, which determines the maximum number of particles allowed in a leaf node. I tested varying values of `s` using two different particle distributions, arriving at the optimal value of `s = 60` which I used thereafter.
 
-I was able to reach over 10¹² effective force calculations per second (140,000 particles, 60fps) with expansion order `p = 10`, yielding an error of about 10⁻⁶. When `p = 20`, this error decreases to around 10⁻¹⁰.
-
-"Effective interactions" means N² divided by the time per step: the number of pairwise forces that direct summation would compute in the same time. Error is measured by `diagnostics.hpp` against exact naive calculation over a random sample of targets.
+I was able to reach over 10¹² effective force calculations per second (140,000 particles, 60fps) with expansion order `p = 10`, yielding an error of about 10⁻⁶. When `p = 20`, this error decreases to around 10⁻¹⁰. Error is measured by `diagnostics.hpp` against exact naive calculation over a random sample of targets. The times below are taken over an average of 30 seconds (1800 frames), starting with 30,000 particles uniformly distributed in a square and 90,000 particles normally distributed around the center.
 
 | N | Naive (ms/step) | Barnes–Hut (ms/step), `θ = 1` | FMM (ms/step), `p = 10` |
 | --- | --- | --- | --- |
